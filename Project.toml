@@ -1,0 +1,17 @@
+name = "FacilityLocation"
+uuid = "4f8b9b42-2703-4bf5-bb1c-2fc2b0940601"
+authors = ["Guillaume Dalle <22795598+gdalle@users.noreply.github.com>"]
+version = "0.1.0"
+
+[deps]
+FacilityLocationProblems = "3771e204-432d-45a9-9661-5d0025a53671"
+GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+
+[compat]
+GPUArrays = "11.2.2"
+KernelAbstractions = "0.9.34"
+LinearAlgebra = "1.11.0"
+Metal = "1.5.1"
