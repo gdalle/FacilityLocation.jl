@@ -5,7 +5,7 @@
 ) where {T}
     j, k = @index(Global, NTuple)
     cjk = typemax(T)
-    @inbounds @simd for i in axes(open_facilities, 1)
+    @simd for i in axes(open_facilities, 1)
         new_cjk = min(cjk, customer_costs[i, j, k])
         cjk = ifelse(open_facilities[i, k], new_cjk, cjk)
     end
