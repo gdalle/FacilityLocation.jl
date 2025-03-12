@@ -6,12 +6,12 @@ using Test
 
 ## Data
 
-I, J, K = 10, 100, 10000
+I, J, K = 20, 100, 10000
 customers_per_facility = 5
 
 facility_costs = rand(Int32(1):Int32(10), I, K);
 customer_costs = rand(Int32(1):Int32(3), I, J, K);
-open_facilities = ones(Bool, I, K);
+open_facilities = rand(Bool, I, K);
 
 backend = MetalBackend()
 gpu_facility_costs = gpu(backend, facility_costs);
