@@ -200,14 +200,11 @@ function local_search(
 
     for it in 1:iterations
         @info "Iteration $it"
-        @show total_cost(open_facilities, problem)
 
         evaluate_addition!(addition_costs, open_facilities, customer_assignments, problem)
         move_add = perform_best_addition!(
             addition_costs, open_facilities, customer_assignments, problem
         )
-
-        @show total_cost(open_facilities, problem)
 
         evaluate_deletion!(deletion_costs, open_facilities, customer_assignments, problem)
         move_del = perform_best_deletion!(

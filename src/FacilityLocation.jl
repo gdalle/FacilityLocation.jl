@@ -14,7 +14,7 @@ include("gpu.jl")
 
 export MultipleFacilityLocationProblem
 export total_cost
-export gpu_total_cost, gpu_total_cost!
+export gpu_total_cost, gpu_total_cost_coarse
 export assign_customers!, evaluate_addition!, evaluate_deletion!
 export local_search
 
