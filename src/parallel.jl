@@ -1,0 +1,42 @@
+@kernel function choose_facilities!(
+    customer_choice_costs::AbstractMatrix{T},
+    @Const(open_facilities::AbstractMatrix{Bool}),
+    @Const(customer_costs::AbstractArray{T,3}),
+) where {T}
+    j, k = @index(Global, NTuple)
+    cjk = typemax(T)
+    @inbounds @simd for i in axes(open_facilities, 1)
+        new_cjk = min(cjk, customer_costs[i, j, k])
+        cjk = ifelse(open_facilities[i, k], new_cjk, cjk)
+    end
+    customer_choice_costs[j, k] = cjk
+end
+
+function gpu_total_cost!(
+    customer_choice_costs::AbstractMatrix,
+    open_facilities::AbstractMatrix{Bool},
+    problem::MultipleFacilityLocationProblem,
+)
+    (; facility_costs, customer_costs) = problem
+    backend = get_backend(problem)
+    kernel! = choose_facilities!(backend)
+    kernel!(
+        customer_choice_costs,
+        open_facilities,
+        customer_costs;
+        ndrange=size(customer_choice_costs),
+    )
+    c1 = dot(open_facilities, facility_costs)
+    c2 = sum(customer_choice_costs)
+    return c1 + c2
+end
+
+function gpu_total_cost(
+    open_facilities::AbstractMatrix{Bool}, problem::MultipleFacilityLocationProblem
+)
+    backend = get_backend(problem)
+    customer_choice_costs = allocate(
+        backend, eltype(problem), (nb_customers(problem), nb_instances(problem))
+    )
+    return gpu_total_cost!(customer_choice_costs, open_facilities, problem)
+end
