@@ -3,53 +3,69 @@
 
 # Fields
 
-- `facility_costs`: a matrix such that `facility_costs[i, k]` is the cost of opening facility `i` in instance `k`
-- `customer_costs`: a 3d-array such that `customer_costs[i, j, k]` is the cost of serving customer `j` with facility `i` in instance `k`
+- `setup_costs`: a matrix such that `setup_costs[i, k]` is the cost of opening facility `i` in instance `k`
+- `serving_costs`: a 3d-array such that `serving_costs[i, j, k]` is the cost of serving customer `j` with facility `i` in instance `k`
+- `rank_to_facility`: a 3d-array such that `rank_to_facility[r, j, k]` is the integer index of the `r`-th closest facility to customer `j` in instance `k`
+- `facility_to_rank`: a 3d-array such that `facility_to_rank[i, j, k]` is the rank of facility `i` for customer `j` in instance `k`
 """
 struct MultipleFacilityLocationProblem{
-    T<:Real,A2<:AbstractArray{T,2},A3<:AbstractArray{T,3}
+    Ti<:Integer,
+    Tr<:Real,
+    A2r<:AbstractArray{Tr,2},
+    A3r<:AbstractArray{Tr,3},
+    A3i<:AbstractArray{Ti,3},
 }
-    facility_costs::A2
-    customer_costs::A3
+    setup_costs::A2r
+    serving_costs::A3r
+    rank_to_facility::A3i
+    facility_to_rank::A3i
+end
 
-    function MultipleFacilityLocationProblem(facility_costs, customer_costs)
-        @assert eltype(facility_costs) == eltype(customer_costs)
-        I1, K1 = size(facility_costs)
-        I2, J2, K2 = size(customer_costs)
-        @assert I1 == I2
-        @assert K1 == K2
-        @assert get_backend(facility_costs) == get_backend(customer_costs)
-        return new{eltype(facility_costs),typeof(facility_costs),typeof(customer_costs)}(
-            facility_costs, customer_costs
-        )
+function MultipleFacilityLocationProblem(
+    setup_costs::AbstractMatrix, serving_costs::AbstractArray{<:Real,3}
+)
+    @assert eltype(setup_costs) == eltype(serving_costs)
+    I1, K1 = size(setup_costs)
+    I2, J2, K2 = size(serving_costs)
+    @assert I1 == I2
+    @assert K1 == K2
+    @assert get_backend(setup_costs) == get_backend(serving_costs)
+
+    rank_to_facility = similar(serving_costs, Int)
+    facility_to_rank = similar(serving_costs, Int)
+    for k in 1:K2, j in 1:J2
+        costs = view(serving_costs, :, j, k)
+        facilities = sortperm(costs)
+        ranks = invperm(facilities)
+        rank_to_facility[:, j, k] .= facilities
+        facility_to_rank[:, j, k] .= ranks
     end
+    return MultipleFacilityLocationProblem(
+        setup_costs, serving_costs, rank_to_facility, facility_to_rank
+    )
+end
+
+function MultipleFacilityLocationProblem(
+    setup_costs::AbstractVector, serving_costs::AbstractMatrix
+)
+    I, J = size(serving_costs)
+    return MultipleFacilityLocationProblem(
+        reshape(setup_costs, I, 1), reshape(serving_costs, I, J, 1)
+    )
 end
 
 const MFLP = MultipleFacilityLocationProblem
 
-Base.eltype(::MFLP{T}) where {T} = T
+Base.eltype(::MFLP{Ti,Tr}) where {Ti,Tr} = Tr
 
-nb_instances(problem::MFLP) = size(problem.facility_costs, 2)
-nb_facilities(problem::MFLP) = size(problem.facility_costs, 1)
-nb_customers(problem::MFLP) = size(problem.customer_costs, 2)
+nb_instances(problem::MFLP) = size(problem.setup_costs, 2)
+nb_facilities(problem::MFLP) = size(problem.setup_costs, 1)
+nb_customers(problem::MFLP) = size(problem.serving_costs, 2)
 
 instances(problem::MFLP) = 1:nb_instances(problem)
 facilities(problem::MFLP) = 1:nb_facilities(problem)
 customers(problem::MFLP) = 1:nb_customers(problem)
 
 function KernelAbstractions.get_backend(problem::MFLP)
-    return get_backend(problem.facility_costs)
-end
-
-"""
-    Solution
-
-# Fields
-
-- `open_facilities`: matrix such that `open_facilities[i, k]` is `true` if facility `i` is open in instance `k`
-- `customer_assignments`: matrix such that `customer_assingments[j, k] = i` if customer `i` is assigned to facility `i` in instance `k`
-"""
-struct Solution{M1<:AbstractMatrix{Bool},M2<:AbstractMatrix{<:Integer}}
-    open_facilities::M1
-    customer_assignments::M2
+    return get_backend(problem.setup_costs)
 end

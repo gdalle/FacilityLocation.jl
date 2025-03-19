@@ -1,21 +1,19 @@
 module FacilityLocation
 
+using Adapt
 using Base.Threads
 using FacilityLocationProblems
 using GPUArrays
 using LinearAlgebra
 using KernelAbstractions
-using Metal: MetalBackend
 using OhMyThreads
 
 include("types.jl")
 include("cpu.jl")
-include("gpu.jl")
+# include("gpu.jl")
 
 export MultipleFacilityLocationProblem
-export total_cost
-export gpu_total_cost, gpu_total_cost_coarse
-export assign_customers!, evaluate_addition!, evaluate_deletion!
-export local_search
+export nb_instances, nb_facilities, nb_customers, instances, facilities, customers
+export Solution, total_cost, local_search
 
 end # module FacilityLocation

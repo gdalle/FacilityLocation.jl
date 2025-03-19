@@ -1,218 +1,142 @@
-function total_cost(open_facilities::AbstractMatrix{Bool}, problem::MFLP{T}) where {T}
-    (; facility_costs, customer_costs) = problem
-    @assert size(open_facilities) == size(facility_costs)
-    c = zero(T)
-    for k in instances(problem)
-        for i in facilities(problem)
-            if open_facilities[i, k]
-                c += facility_costs[i, k]
-            end
-        end
-        for j in customers(problem)
-            cjk = typemax(T)
-            for i in facilities(problem)
-                if open_facilities[i, k]
-                    cjk = min(cjk, customer_costs[i, j, k])
-                end
-            end
-            c += cjk
-        end
-    end
-    return c
+"""
+    Solution
+
+# Fields
+
+- `open_facilities`: matrix such that `open_facilities[i, k]` is `true` if facility `i` is open in instance `k`
+- `customer_assignments`: matrix such that `customer_assingments[j, k] = i` if customer `i` is assigned to facility `i` in instance `k`
+"""
+struct Solution{M1<:AbstractMatrix{Bool},M2<:AbstractMatrix{<:Integer}}
+    open_facilities::M1
+    customer_assignments::M2
+end
+
+function Solution(open_facilities::AbstractMatrix{Bool}, problem::MFLP)
+    customer_assignments = similar(
+        open_facilities, Int, nb_customers(problem), nb_instances(problem)
+    )
+    assign_customers!(customer_assignments, open_facilities, problem)
+    return Solution(open_facilities, customer_assignments)
+end
+
+function Solution(open_facilities::AbstractVector{Bool}, problem::MFLP)
+    return Solution(reshape(open_facilities, length(open_facilities), 1), problem)
 end
 
 function assign_customers!(
     customer_assignments::AbstractMatrix{Int},
     open_facilities::AbstractMatrix{Bool},
-    problem::MFLP{T},
-) where {T}
-    (; customer_costs) = problem
-    for k in instances(problem)
+    problem::MFLP,
+)
+    (; rank_to_facility) = problem
+    @threads for k in instances(problem)
         for j in customers(problem)
-            i_chosen = 0
-            cjk = typemax(T)
-            for i in facilities(problem)
-                cijk = customer_costs[i, j, k]
-                if open_facilities[i, k] && cijk < cjk
-                    cjk = cijk
-                    i_chosen = i
+            customer_assignments[j, k] = 0
+            # find the best-ranking open facility
+            for r in 1:nb_facilities(problem)
+                i = rank_to_facility[r, j, k]
+                if open_facilities[i, k]
+                    customer_assignments[j, k] = i
+                    break
                 end
             end
-            @assert i_chosen > 0
-            customer_assignments[j, k] = i_chosen
+            @assert customer_assignments[j, k] > 0
         end
     end
     return customer_assignments
 end
 
-function evaluate_addition!(
-    addition_costs::AbstractMatrix{T},
-    open_facilities::AbstractMatrix{Bool},
-    customer_assignments::AbstractMatrix{Int},
-    problem::MFLP,
-) where {T}
-    (; facility_costs, customer_costs) = problem
+function total_cost(solution::Solution, problem::MFLP)
+    (; setup_costs, serving_costs) = problem
+    (; open_facilities, customer_assignments) = solution
+    @assert size(open_facilities) == size(setup_costs)
+    c = zero(eltype(problem))
     for k in instances(problem)
         for i in facilities(problem)
-            if open_facilities[i, k]
-                addition_costs[i, k] = typemax(T)
-            else
-                addition_costs[i, k] = facility_costs[i, k]
-            end
+            c += open_facilities[i, k] * setup_costs[i, k]
         end
         for j in customers(problem)
+            i = customer_assignments[j, k]
+            c += serving_costs[i, j, k]
+        end
+    end
+    return c
+end
+
+function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem::MFLP)
+    (; setup_costs, serving_costs, facility_to_rank, rank_to_facility) = problem
+    (; open_facilities, customer_assignments) = solution
+    @threads for k in instances(problem)
+        for i in facilities(problem)
+            if open_facilities[i, k]
+                # closing saves on setup
+                flip_costs[i, k] = -setup_costs[i, k]
+            else
+                # opening costs on setup
+                flip_costs[i, k] = setup_costs[i, k]
+            end
+        end
+        # more logical to iterate over customers than facilities for updating serving costs
+        for j in customers(problem)
+            # a customer switches if a better facility opens or if the current one closes
             i⁻ = customer_assignments[j, k]
-            cjk⁻ = customer_costs[i⁻, j, k]
-            for i⁺ in facilities(problem)
+            r⁻ = facility_to_rank[i⁻, j, k]
+            # if better facility opens, switch to it directly
+            for r⁺ in 1:(r⁻ - 1)
+                i⁺ = rank_to_facility[r⁺, j, k]
                 if !open_facilities[i⁺, k]
-                    cjk⁺ = customer_costs[i⁺, j, k]
-                    if cjk⁺ < cjk⁻
-                        addition_costs[i⁺, k] -= (cjk⁻ - cjk⁺)
-                    end
+                    # oppening saves on serving
+                    cost_diff = serving_costs[i⁺, j, k] - serving_costs[i⁻, j, k]
+                    @assert cost_diff < 0
+                    flip_costs[i⁺, k] += cost_diff
                 end
+            end
+            # if current facility closes, find the next highest-ranking open facility
+            found = false
+            for r⁺ in (r⁻ + 1):nb_facilities(problem)
+                i⁺ = rank_to_facility[r⁺, j, k]
+                if open_facilities[i⁺, k]
+                    found = true
+                    # closing costs on serving
+                    cost_diff = serving_costs[i⁺, j, k] - serving_costs[i⁻, j, k]
+                    @assert cost_diff > 0
+                    flip_costs[i⁻, k] += cost_diff
+                    break
+                end
+            end
+            if !found
+                # switch would leave a customer stranded, infeasible
+                flip_costs[i⁻, k] = typemax(eltype(problem))
             end
         end
     end
-    return addition_costs
+    return flip_costs
 end
 
-function perform_best_addition!(
-    addition_costs::AbstractMatrix{T},
-    open_facilities::AbstractMatrix{Bool},
-    customer_assignments::AbstractMatrix{Int},
-    problem::MFLP,
-) where {T}
-    (; facility_costs, customer_costs) = problem
-    move = false
-    for k in instances(problem)
-        i_add = 0
-        ck = zero(T)
-        for i in facilities(problem)
-            cik = addition_costs[i, k]
-            if !open_facilities[i, k] && cik < ck
-                i_add = i
-                ck = cik
-            end
-        end
-        if ck < zero(T)
-            move = true
-            @assert i_add > 0
-            open_facilities[i_add, k] = true
-            for j in customers(problem)
-                i⁻ = customer_assignments[j, k]
-                cjk⁻ = customer_costs[i⁻, j, k]
-                cjk⁺ = customer_costs[i_add, j, k]
-                if cjk⁺ < cjk⁻
-                    customer_assignments[j, k] = i_add
-                end
-            end
+function perform_best_flip!(flip_costs::AbstractMatrix, solution::Solution, problem::MFLP)
+    (; open_facilities, customer_assignments) = solution
+    flipped = false
+    @threads for k in instances(problem)
+        i = argmin(view(flip_costs, :, k))
+        if flip_costs[i, k] < 0
+            flipped = true
+            open_facilities[i, k] = !open_facilities[i, k]
         end
     end
-    return move
-end
-
-function evaluate_deletion!(
-    deletion_costs::AbstractMatrix{T},
-    open_facilities::AbstractMatrix{Bool},
-    customer_assignments::AbstractMatrix{Int},
-    problem::MFLP{T},
-) where {T}
-    (; facility_costs, customer_costs) = problem
-    for k in instances(problem)
-        for i in facilities(problem)
-            if open_facilities[i, k]
-                deletion_costs[i, k] = -facility_costs[i, k]
-            else
-                deletion_costs[i, k] = typemax(T)
-            end
-        end
-        for j in customers(problem)
-            i⁻ = customer_assignments[j, k]
-            cjk⁻ = customer_costs[i⁻, j, k]
-            cjk⁺ = typemax(T)
-            for i⁺ in facilities(problem)
-                if open_facilities[i⁺, k] && i⁺ != i⁻
-                    cjk⁺ = min(cjk⁺, customer_costs[i⁺, j, k])
-                end
-            end
-            deletion_costs[i⁻, k] += (cjk⁺ - cjk⁻)
-        end
-    end
-    return deletion_costs
-end
-
-function perform_best_deletion!(
-    deletion_costs::AbstractMatrix{T},
-    open_facilities::AbstractMatrix{Bool},
-    customer_assignments::AbstractMatrix{Int},
-    problem::MFLP{T},
-) where {T}
-    (; facility_costs, customer_costs) = problem
-    move = false
-    for k in instances(problem)
-        nb_open = 0
-        i_del = 0
-        ck = zero(T)
-        for i in facilities(problem)
-            cik = deletion_costs[i, k]
-            if open_facilities[i, k]
-                nb_open += 1
-                if cik < ck
-                    i_del = i
-                    ck = cik
-                end
-            end
-        end
-        if nb_open >= 2 && ck < zero(T)
-            move = true
-            open_facilities[i_del, k] = false
-            for j in customers(problem)
-                if customer_assignments[j, k] == i_del
-                    i⁺ = 0
-                    cjk⁺ = typemax(T)
-                    for i in facilities(problem)
-                        cijk = customer_costs[i, j, k]
-                        if open_facilities[i, k] && cijk < cjk⁺
-                            i⁺ = i
-                            cjk⁺ = cijk
-                        end
-                    end
-                    customer_assignments[j, k] = i⁺
-                end
-            end
-        end
-    end
-    return move
-end
-
-function local_search(
-    open_facilities::AbstractMatrix{Bool}, problem::MFLP{T}; iterations=10
-) where {T}
-    open_facilities = copy(open_facilities)
-    I, J, K = nb_facilities(problem), nb_customers(problem), nb_instances(problem)
-    @assert size(open_facilities) == (I, K)
-
-    customer_assignments = Matrix{Int}(undef, J, K)
     assign_customers!(customer_assignments, open_facilities, problem)
+    return flipped
+end
 
-    addition_costs = fill(typemax(T), I, K)
-    deletion_costs = fill(typemax(T), I, K)
-
+function local_search(solution::Solution, problem::MFLP; iterations=10, verbose=false)
+    solution = deepcopy(solution)
+    flip_costs = fill(
+        typemax(eltype(problem)), nb_facilities(problem), nb_customers(problem)
+    )
     for it in 1:iterations
-        @info "Iteration $it"
-
-        evaluate_addition!(addition_costs, open_facilities, customer_assignments, problem)
-        move_add = perform_best_addition!(
-            addition_costs, open_facilities, customer_assignments, problem
-        )
-
-        evaluate_deletion!(deletion_costs, open_facilities, customer_assignments, problem)
-        move_del = perform_best_deletion!(
-            deletion_costs, open_facilities, customer_assignments, problem
-        )
-
-        move_add || move_del || break
+        verbose && @info "Iteration $it - cost $(total_cost(solution, problem))"
+        evaluate_flip!(flip_costs, solution, problem)
+        flipped = perform_best_flip!(flip_costs, solution, problem)
+        flipped || break
     end
-
-    return open_facilities
+    return solution
 end
