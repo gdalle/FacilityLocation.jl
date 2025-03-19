@@ -1,5 +1,10 @@
 """
-    MultipleFacilityLocationProblem
+    FacilityLocationProblem
+
+# Constructors
+
+    FacilityLocationProblem(setup_costs::AbstractMatrix, serving_costs::AbstractArray{<:Real,3})
+    FacilityLocationProblem(setup_costs::AbstractVector, serving_costs::AbstractMatrix)  # single-instance
 
 # Fields
 
@@ -8,7 +13,7 @@
 - `rank_to_facility`: a 3d-array such that `rank_to_facility[r, j, k]` is the integer index of the `r`-th closest facility to customer `j` in instance `k`
 - `facility_to_rank`: a 3d-array such that `facility_to_rank[i, j, k]` is the rank of facility `i` for customer `j` in instance `k`
 """
-struct MultipleFacilityLocationProblem{
+struct FacilityLocationProblem{
     Ti<:Integer,
     Tr<:Real,
     A2r<:AbstractArray{Tr,2},
@@ -21,7 +26,7 @@ struct MultipleFacilityLocationProblem{
     facility_to_rank::A3i
 end
 
-function MultipleFacilityLocationProblem(
+function FacilityLocationProblem(
     setup_costs::AbstractMatrix, serving_costs::AbstractArray{<:Real,3}
 )
     @assert eltype(setup_costs) == eltype(serving_costs)
@@ -40,32 +45,30 @@ function MultipleFacilityLocationProblem(
         rank_to_facility[:, j, k] .= facilities
         facility_to_rank[:, j, k] .= ranks
     end
-    return MultipleFacilityLocationProblem(
+    return FacilityLocationProblem(
         setup_costs, serving_costs, rank_to_facility, facility_to_rank
     )
 end
 
-function MultipleFacilityLocationProblem(
-    setup_costs::AbstractVector, serving_costs::AbstractMatrix
-)
+function FacilityLocationProblem(setup_costs::AbstractVector, serving_costs::AbstractMatrix)
     I, J = size(serving_costs)
-    return MultipleFacilityLocationProblem(
+    return FacilityLocationProblem(
         reshape(setup_costs, I, 1), reshape(serving_costs, I, J, 1)
     )
 end
 
-const MFLP = MultipleFacilityLocationProblem
+const FLP = FacilityLocationProblem
 
-Base.eltype(::MFLP{Ti,Tr}) where {Ti,Tr} = Tr
+Base.eltype(::FLP{Ti,Tr}) where {Ti,Tr} = Tr
 
-nb_instances(problem::MFLP) = size(problem.setup_costs, 2)
-nb_facilities(problem::MFLP) = size(problem.setup_costs, 1)
-nb_customers(problem::MFLP) = size(problem.serving_costs, 2)
+nb_instances(problem::FLP) = size(problem.setup_costs, 2)
+nb_facilities(problem::FLP) = size(problem.setup_costs, 1)
+nb_customers(problem::FLP) = size(problem.serving_costs, 2)
 
-instances(problem::MFLP) = 1:nb_instances(problem)
-facilities(problem::MFLP) = 1:nb_facilities(problem)
-customers(problem::MFLP) = 1:nb_customers(problem)
+instances(problem::FLP) = 1:nb_instances(problem)
+facilities(problem::FLP) = 1:nb_facilities(problem)
+customers(problem::FLP) = 1:nb_customers(problem)
 
-function KernelAbstractions.get_backend(problem::MFLP)
+function KernelAbstractions.get_backend(problem::FLP)
     return get_backend(problem.setup_costs)
 end

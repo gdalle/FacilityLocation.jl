@@ -1,6 +1,11 @@
 """
     Solution
 
+# Constructors
+
+    Solution(open_facilities::AbstractMatrix, problem)
+    Solution(open_facilities::AbstractVector, problem)  # single-instance
+
 # Fields
 
 - `open_facilities`: matrix such that `open_facilities[i, k]` is `true` if facility `i` is open in instance `k`
@@ -11,7 +16,7 @@ struct Solution{M1<:AbstractMatrix{Bool},M2<:AbstractMatrix{<:Integer}}
     customer_assignments::M2
 end
 
-function Solution(open_facilities::AbstractMatrix{Bool}, problem::MFLP)
+function Solution(open_facilities::AbstractMatrix{Bool}, problem::FLP)
     customer_assignments = similar(
         open_facilities, Int, nb_customers(problem), nb_instances(problem)
     )
@@ -19,14 +24,18 @@ function Solution(open_facilities::AbstractMatrix{Bool}, problem::MFLP)
     return Solution(open_facilities, customer_assignments)
 end
 
-function Solution(open_facilities::AbstractVector{Bool}, problem::MFLP)
+function Solution(open_facilities::AbstractVector{Bool}, problem::FLP)
     return Solution(reshape(open_facilities, length(open_facilities), 1), problem)
+end
+
+function Base.copy(solution::Solution)
+    return Solution(copy(solution.open_facilities), copy(solution.customer_assignments))
 end
 
 function assign_customers!(
     customer_assignments::AbstractMatrix{Int},
     open_facilities::AbstractMatrix{Bool},
-    problem::MFLP,
+    problem::FLP,
 )
     (; rank_to_facility) = problem
     @threads for k in instances(problem)
@@ -46,7 +55,7 @@ function assign_customers!(
     return customer_assignments
 end
 
-function total_cost(solution::Solution, problem::MFLP)
+function total_cost(solution::Solution, problem::FLP)
     (; setup_costs, serving_costs) = problem
     (; open_facilities, customer_assignments) = solution
     @assert size(open_facilities) == size(setup_costs)
@@ -63,7 +72,7 @@ function total_cost(solution::Solution, problem::MFLP)
     return c
 end
 
-function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem::MFLP)
+function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem::FLP)
     (; setup_costs, serving_costs, facility_to_rank, rank_to_facility) = problem
     (; open_facilities, customer_assignments) = solution
     @threads for k in instances(problem)
@@ -113,7 +122,7 @@ function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem:
     return flip_costs
 end
 
-function perform_best_flip!(flip_costs::AbstractMatrix, solution::Solution, problem::MFLP)
+function perform_best_flip!(flip_costs::AbstractMatrix, solution::Solution, problem::FLP)
     (; open_facilities, customer_assignments) = solution
     flipped = false
     @threads for k in instances(problem)
@@ -127,16 +136,28 @@ function perform_best_flip!(flip_costs::AbstractMatrix, solution::Solution, prob
     return flipped
 end
 
-function local_search(solution::Solution, problem::MFLP; iterations=10, verbose=false)
-    solution = deepcopy(solution)
+"""
+    local_search(old_solution, problem; iterations=10)
+
+Perform local search by iteratively finding and applying the best flip movement (open or close a single facility) across all instances in parallel.
+
+Return a tuple `(new_solution, cost_evolution)`.
+"""
+function local_search(old_solution::Solution, problem::FLP; iterations=10)
+    solution = copy(old_solution)
     flip_costs = fill(
         typemax(eltype(problem)), nb_facilities(problem), nb_customers(problem)
     )
+    cost_evolution = fill(convert(eltype(problem), NaN), iterations + 1)
+    cost_evolution[1] = total_cost(solution, problem)
     for it in 1:iterations
-        verbose && @info "Iteration $it - cost $(total_cost(solution, problem))"
         evaluate_flip!(flip_costs, solution, problem)
         flipped = perform_best_flip!(flip_costs, solution, problem)
-        flipped || break
+        cost_evolution[it + 1] = total_cost(solution, problem)
+        if !flipped
+            resize!(cost_evolution, it)
+            break
+        end
     end
-    return solution
+    return solution, cost_evolution
 end

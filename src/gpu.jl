@@ -33,7 +33,7 @@ end
 function gpu_total_cost_coarse!(
     customer_choice_costs::AbstractVector,
     open_facilities::AbstractMatrix{Bool},
-    problem::MultipleFacilityLocationProblem,
+    problem::FacilityLocationProblem,
 )
     (; setup_costs, serving_costs) = problem
     backend = get_backend(problem)
@@ -52,7 +52,7 @@ end
 function gpu_total_cost!(
     customer_choice_costs::AbstractMatrix,
     open_facilities::AbstractMatrix{Bool},
-    problem::MultipleFacilityLocationProblem,
+    problem::FacilityLocationProblem,
 )
     (; setup_costs, serving_costs) = problem
     backend = get_backend(problem)
@@ -69,7 +69,7 @@ function gpu_total_cost!(
 end
 
 function gpu_total_cost_coarse(
-    open_facilities::AbstractMatrix{Bool}, problem::MultipleFacilityLocationProblem
+    open_facilities::AbstractMatrix{Bool}, problem::FacilityLocationProblem
 )
     backend = get_backend(problem)
     customer_choice_costs = allocate(backend, eltype(problem), (nb_instances(problem),))
@@ -77,7 +77,7 @@ function gpu_total_cost_coarse(
 end
 
 function gpu_total_cost(
-    open_facilities::AbstractMatrix{Bool}, problem::MultipleFacilityLocationProblem
+    open_facilities::AbstractMatrix{Bool}, problem::FacilityLocationProblem
 )
     backend = get_backend(problem)
     customer_choice_costs = allocate(

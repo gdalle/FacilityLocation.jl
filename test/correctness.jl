@@ -12,11 +12,11 @@ using Test
         0.3 0.4 0.7 0.4 0.2 0.5
     ]
 
-    problem = MultipleFacilityLocationProblem(setup_costs, serving_costs)
+    problem = FacilityLocationProblem(setup_costs, serving_costs)
 
     open_facilities = [false, true, true]
     solution = Solution(open_facilities, problem)
-    new_solution = local_search(solution, problem)
+    new_solution, _ = local_search(solution, problem)
 
     @test nb_instances(problem) == 1
     @test nb_facilities(problem) == 3
@@ -45,11 +45,12 @@ end
     customers_per_facility = 10
     setup_costs = rand(StableRNG(0), Float32, I, K) * customers_per_facility
     serving_costs = rand(StableRNG(1), Float32, I, J, K)
-    problem = MultipleFacilityLocationProblem(setup_costs, serving_costs)
+    problem = FacilityLocationProblem(setup_costs, serving_costs)
 
     solution = Solution(ones(Bool, I, K), problem)
-    total_cost(solution, problem)
-    new_solution = local_search(solution, problem; iterations=100)
+    new_solution, cost_evolution = local_search(solution, problem; iterations=100)
     @test total_cost(new_solution, problem) < total_cost(solution, problem)
+    @test length(cost_evolution) > 5
+    @test all(>(0), cost_evolution)
     @test mean(new_solution.open_facilities) < 1
 end
