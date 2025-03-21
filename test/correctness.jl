@@ -16,7 +16,7 @@ using Test
 
     open_facilities = [false, true, true]
     solution = Solution(open_facilities, problem)
-    new_solution, _ = local_search(solution, problem)
+    new_solution, _ = local_search(problem, solution)
 
     @test nb_instances(problem) == 1
     @test nb_facilities(problem) == 3
@@ -48,7 +48,7 @@ end
     problem = FacilityLocationProblem(setup_costs, serving_costs)
 
     solution = Solution(ones(Bool, I, K), problem)
-    new_solution, cost_evolution = local_search(solution, problem; iterations=100)
+    new_solution, cost_evolution = local_search(problem, solution; iterations=100)
     @test total_cost(new_solution, problem) < total_cost(solution, problem)
     @test length(cost_evolution) > 5
     @test all(>(0), cost_evolution)
@@ -59,9 +59,7 @@ end
     I, J, K = 20, 500, 5
     problem = FacilityLocationProblem(I, J, K)
     solution = Solution(ones(Bool, I, K), problem)
-    new_solution, cost_evolution = local_search(
-        problem; iterations=100, starting_solution=solution
-    )
+    new_solution, cost_evolution = local_search(problem, solution; iterations=100)
     @test total_cost(new_solution, problem) < total_cost(solution, problem)
     @test length(cost_evolution) > 5
     @test all(>(0), cost_evolution)
