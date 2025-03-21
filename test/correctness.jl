@@ -54,3 +54,16 @@ end
     @test all(>(0), cost_evolution)
     @test mean(new_solution.open_facilities) < 1
 end
+
+@testset "Instances with coordinates" begin
+    I, J, K = 20, 500, 5
+    problem = FacilityLocationProblem(I, J, K)
+    solution = Solution(ones(Bool, I, K), problem)
+    new_solution, cost_evolution = local_search(
+        problem; iterations=100, starting_solution=solution
+    )
+    @test total_cost(new_solution, problem) < total_cost(solution, problem)
+    @test length(cost_evolution) > 5
+    @test all(>(0), cost_evolution)
+    @test mean(new_solution.open_facilities) < 1
+end

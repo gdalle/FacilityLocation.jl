@@ -28,6 +28,44 @@ function Solution(open_facilities::AbstractVector{Bool}, problem::FLP)
     return Solution(reshape(open_facilities, length(open_facilities), 1), problem)
 end
 
+function Solution(open_facilities, problem::FLPWC)
+    return Solution(open_facilities, problem.problem)
+end
+
+function plot_solution(solution::Solution, problem::FLPWC, k::Integer=1; kwargs...)
+    fig = plot_instance(problem, k; kwargs...)
+    open_facilities = solution.open_facilities[:, k]
+    customer_assignments = solution.customer_assignments[:, k]
+
+    facility_x = problem.facility_coordinates[:, 1, k]
+    facility_y = problem.facility_coordinates[:, 2, k]
+
+    scatter!(
+        fig,
+        facility_x[open_facilities],
+        facility_y[open_facilities];
+        markershape=:square,
+        markercolor=:red,
+        markersize=6,
+        markerstrokecolor=:red,
+        markerstrokewidth=2,
+        label=nothing,
+    )
+
+    for j in customers(problem)
+        i = customer_assignments[j]
+        plot!(
+            fig,
+            [problem.facility_coordinates[i, 1, k], problem.customer_coordinates[j, 1, k]],
+            [problem.facility_coordinates[i, 2, k], problem.customer_coordinates[j, 2, k]];
+            color=:black,
+            label=nothing,
+        )
+    end
+
+    return fig
+end
+
 function Base.copy(solution::Solution)
     return Solution(copy(solution.open_facilities), copy(solution.customer_assignments))
 end
@@ -59,17 +97,22 @@ function total_cost(solution::Solution, problem::FLP)
     (; setup_costs, serving_costs) = problem
     (; open_facilities, customer_assignments) = solution
     @assert size(open_facilities) == size(setup_costs)
-    c = zero(eltype(problem))
-    for k in instances(problem)
+    c = tmapreduce(+, instances(problem)) do k
+        res = zero(eltype(problem))
         for i in facilities(problem)
-            c += open_facilities[i, k] * setup_costs[i, k]
+            res += open_facilities[i, k] * setup_costs[i, k]
         end
         for j in customers(problem)
             i = customer_assignments[j, k]
-            c += serving_costs[i, j, k]
+            res += serving_costs[i, j, k]
         end
+        return res
     end
     return c
+end
+
+function total_cost(solution::Solution, problem::FLPWC)
+    return total_cost(solution, problem.problem)
 end
 
 function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem::FLP)
@@ -94,9 +137,9 @@ function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem:
             for r⁺ in 1:(r⁻ - 1)
                 i⁺ = rank_to_facility[r⁺, j, k]
                 if !open_facilities[i⁺, k]
-                    # oppening saves on serving
+                    # opening saves on serving
                     cost_diff = serving_costs[i⁺, j, k] - serving_costs[i⁻, j, k]
-                    @assert cost_diff < 0
+                    @assert cost_diff <= 0
                     flip_costs[i⁺, k] += cost_diff
                 end
             end
@@ -108,7 +151,7 @@ function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem:
                     found = true
                     # closing costs on serving
                     cost_diff = serving_costs[i⁺, j, k] - serving_costs[i⁻, j, k]
-                    @assert cost_diff > 0
+                    @assert cost_diff >= 0
                     flip_costs[i⁻, k] += cost_diff
                     break
                 end
@@ -146,7 +189,7 @@ Return a tuple `(new_solution, cost_evolution)`.
 function local_search(old_solution::Solution, problem::FLP; iterations=10)
     solution = copy(old_solution)
     flip_costs = fill(
-        typemax(eltype(problem)), nb_facilities(problem), nb_customers(problem)
+        typemax(eltype(problem)), nb_facilities(problem), nb_instances(problem)
     )
     cost_evolution = fill(convert(eltype(problem), NaN), iterations + 1)
     cost_evolution[1] = total_cost(solution, problem)
@@ -160,4 +203,14 @@ function local_search(old_solution::Solution, problem::FLP; iterations=10)
         end
     end
     return solution, cost_evolution
+end
+
+function local_search(
+    problem::FLPWC;
+    iterations=10,
+    starting_solution=Solution(
+        ones(Bool, nb_facilities(problem), nb_instances(problem)), problem
+    ),
+)
+    return local_search(starting_solution, problem.problem; iterations=iterations)
 end
