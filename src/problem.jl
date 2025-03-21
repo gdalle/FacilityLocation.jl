@@ -16,6 +16,7 @@
 struct FacilityLocationProblem{
     Ti<:Integer,
     Tr<:Real,
+    C<:Union{AbstractArray{Tr,3},Nothing},
     A2r<:AbstractArray{Tr,2},
     A3r<:AbstractArray{Tr,3},
     A3i<:AbstractArray{Ti,3},
@@ -24,6 +25,8 @@ struct FacilityLocationProblem{
     serving_costs::A3r
     rank_to_facility::A3i
     facility_to_rank::A3i
+    facility_coordinates::C
+    customer_coordinates::C
 end
 
 function FacilityLocationProblem(
@@ -46,7 +49,7 @@ function FacilityLocationProblem(
         facility_to_rank[:, j, k] .= ranks
     end
     return FacilityLocationProblem(
-        setup_costs, serving_costs, rank_to_facility, facility_to_rank
+        setup_costs, serving_costs, rank_to_facility, facility_to_rank, nothing, nothing
     )
 end
 
@@ -55,6 +58,71 @@ function FacilityLocationProblem(setup_costs::AbstractVector, serving_costs::Abs
     return FacilityLocationProblem(
         reshape(setup_costs, I, 1), reshape(serving_costs, I, J, 1)
     )
+end
+
+function FacilityLocationProblem(
+    setup_costs::AbstractMatrix,
+    facility_coordinates::AbstractArray{<:Real,3},
+    customer_coordinates::AbstractArray{<:Real,3},
+)
+    I, K = size(setup_costs)
+    J, D, K2 = size(customer_coordinates)
+    I2, D2, K3 = size(facility_coordinates)
+    @assert I == I2
+    @assert K == K2 == K3
+    @assert D == D2 == 2
+    @assert eltype(setup_costs) ==
+        eltype(facility_coordinates) ==
+        eltype(customer_coordinates)
+
+    serving_costs = zeros(eltype(setup_costs), I, J, K)
+    for k in 1:K, j in 1:J, i in 1:I
+        dx = facility_coordinates[i, 1, k] - customer_coordinates[j, 1, k]
+        dy = facility_coordinates[i, 2, k] - customer_coordinates[j, 2, k]
+        serving_costs[i, j, k] = sqrt(dx * dx + dy * dy)
+    end
+
+    p = FacilityLocationProblem(setup_costs, serving_costs)
+    return FacilityLocationProblem(
+        p.setup_costs,
+        p.serving_costs,
+        p.rank_to_facility,
+        p.facility_to_rank,
+        facility_coordinates,
+        customer_coordinates,
+    )
+end
+
+function FacilityLocationProblem(
+    setup_costs::AbstractVector,
+    facility_coordinates::AbstractMatrix,
+    customer_coordinates::AbstractMatrix,
+)
+    I = length(setup_costs)
+    J, D = size(customer_coordinates)
+    I2, D2 = size(facility_coordinates)
+    @assert I == I2
+    @assert D == D2 == 2
+
+    return FacilityLocationProblem(
+        reshape(setup_costs, I, 1),
+        reshape(facility_coordinates, I, D, 1),
+        reshape(customer_coordinates, J, D, 1),
+    )
+end
+
+function FacilityLocationProblem(
+    I::Integer,
+    J::Integer,
+    K::Integer=1;
+    customers_per_facility=10,
+    seed=0,
+    rng=StableRNG(seed),
+)
+    setup_costs = rand(rng, Float32, I, K) * customers_per_facility
+    facility_coordinates = rand(rng, Float32, I, 2, K)
+    customer_coordinates = rand(rng, Float32, J, 2, K)
+    return FacilityLocationProblem(setup_costs, facility_coordinates, customer_coordinates)
 end
 
 const FLP = FacilityLocationProblem
