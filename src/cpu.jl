@@ -1,37 +1,3 @@
-"""
-    Solution
-
-# Constructors
-
-    Solution(open_facilities::AbstractMatrix, problem)
-    Solution(open_facilities::AbstractVector, problem)  # single-instance
-
-# Fields
-
-- `open_facilities`: matrix such that `open_facilities[i, k]` is `true` if facility `i` is open in instance `k`
-- `customer_assignments`: matrix such that `customer_assingments[j, k] = i` if customer `i` is assigned to facility `i` in instance `k`
-"""
-struct Solution{M1<:AbstractMatrix{Bool},M2<:AbstractMatrix{<:Integer}}
-    open_facilities::M1
-    customer_assignments::M2
-end
-
-function Solution(open_facilities::AbstractMatrix{Bool}, problem::FLP)
-    customer_assignments = similar(
-        open_facilities, Int, nb_customers(problem), nb_instances(problem)
-    )
-    assign_customers!(customer_assignments, open_facilities, problem)
-    return Solution(open_facilities, customer_assignments)
-end
-
-function Solution(open_facilities::AbstractVector{Bool}, problem::FLP)
-    return Solution(reshape(open_facilities, length(open_facilities), 1), problem)
-end
-
-function Base.copy(solution::Solution)
-    return Solution(copy(solution.open_facilities), copy(solution.customer_assignments))
-end
-
 function assign_customers!(
     customer_assignments::AbstractMatrix{Int},
     open_facilities::AbstractMatrix{Bool},
@@ -59,15 +25,16 @@ function total_cost(solution::Solution, problem::FLP)
     (; setup_costs, serving_costs) = problem
     (; open_facilities, customer_assignments) = solution
     @assert size(open_facilities) == size(setup_costs)
-    c = zero(eltype(problem))
-    for k in instances(problem)
+    c = tmapreduce(+, instances(problem)) do k
+        res = zero(eltype(problem))
         for i in facilities(problem)
-            c += open_facilities[i, k] * setup_costs[i, k]
+            res += open_facilities[i, k] * setup_costs[i, k]
         end
         for j in customers(problem)
             i = customer_assignments[j, k]
-            c += serving_costs[i, j, k]
+            res += serving_costs[i, j, k]
         end
+        return res
     end
     return c
 end
@@ -94,9 +61,9 @@ function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem:
             for r⁺ in 1:(r⁻ - 1)
                 i⁺ = rank_to_facility[r⁺, j, k]
                 if !open_facilities[i⁺, k]
-                    # oppening saves on serving
+                    # opening saves on serving
                     cost_diff = serving_costs[i⁺, j, k] - serving_costs[i⁻, j, k]
-                    @assert cost_diff < 0
+                    @assert cost_diff <= 0
                     flip_costs[i⁺, k] += cost_diff
                 end
             end
@@ -108,7 +75,7 @@ function evaluate_flip!(flip_costs::AbstractMatrix, solution::Solution, problem:
                     found = true
                     # closing costs on serving
                     cost_diff = serving_costs[i⁺, j, k] - serving_costs[i⁻, j, k]
-                    @assert cost_diff > 0
+                    @assert cost_diff >= 0
                     flip_costs[i⁻, k] += cost_diff
                     break
                 end
@@ -137,16 +104,22 @@ function perform_best_flip!(flip_costs::AbstractMatrix, solution::Solution, prob
 end
 
 """
-    local_search(old_solution, problem; iterations=10)
+    local_search(problem; iterations=10, starting_solution)
 
 Perform local search by iteratively finding and applying the best flip movement (open or close a single facility) across all instances in parallel.
 
 Return a tuple `(new_solution, cost_evolution)`.
 """
-function local_search(old_solution::Solution, problem::FLP; iterations=10)
-    solution = copy(old_solution)
+function local_search(
+    problem::FLP,
+    starting_solution::Solution=Solution(
+        ones(Bool, nb_facilities(problem), nb_instances(problem)), problem
+    );
+    iterations=10,
+)
+    solution = copy(starting_solution)
     flip_costs = fill(
-        typemax(eltype(problem)), nb_facilities(problem), nb_customers(problem)
+        typemax(eltype(problem)), nb_facilities(problem), nb_instances(problem)
     )
     cost_evolution = fill(convert(eltype(problem), NaN), iterations + 1)
     cost_evolution[1] = total_cost(solution, problem)
