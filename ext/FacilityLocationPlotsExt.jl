@@ -1,12 +1,19 @@
-function plot_instance(
-    problem::FLP{Ti,Tr,<:AbstractArray{Tr,3}}, k::Integer=1; kwargs...
-) where {Ti,Tr}
-    @assert k in instances(problem)
+module FacilityLocationPlotsExt
 
-    facility_x = problem.facility_coordinates[:, 1, k]
-    facility_y = problem.facility_coordinates[:, 2, k]
-    customer_x = problem.customer_coordinates[:, 1, k]
-    customer_y = problem.customer_coordinates[:, 2, k]
+using FacilityLocation
+using Plots
+
+const FLP = FacilityLocationProblem
+
+function FacilityLocation.plot_instance(problem::FLP, k::Integer=1; kwargs...)
+    @assert problem.facility_coordinates !== nothing
+    @assert problem.customer_coordinates !== nothing
+    @assert k in FacilityLocation.instances(problem)
+
+    facility_x = first.(problem.facility_coordinates[:, k])
+    facility_y = last.(problem.facility_coordinates[:, k])
+    customer_x = first.(problem.customer_coordinates[:, k])
+    customer_y = last.(problem.customer_coordinates[:, k])
 
     fig = plot(; xrange=(0, 1), yrange=(0, 1), kwargs...)
     scatter!(
@@ -32,15 +39,15 @@ function plot_instance(
     return fig
 end
 
-function plot_solution(
-    solution::Solution, problem::FLP{Ti,Tr,<:AbstractArray{Tr,3}}, k::Integer=1; kwargs...
-) where {Ti,Tr}
+function FacilityLocation.plot_solution(
+    solution::Solution, problem::FLP, k::Integer=1; kwargs...
+)
     fig = plot_instance(problem, k; kwargs...)
     open_facilities = solution.open_facilities[:, k]
     customer_assignments = solution.customer_assignments[:, k]
 
-    facility_x = problem.facility_coordinates[:, 1, k]
-    facility_y = problem.facility_coordinates[:, 2, k]
+    facility_x = first.(problem.facility_coordinates[:, k])
+    facility_y = last.(problem.facility_coordinates[:, k])
 
     scatter!(
         fig,
@@ -58,12 +65,14 @@ function plot_solution(
         i = customer_assignments[j]
         plot!(
             fig,
-            [problem.facility_coordinates[i, 1, k], problem.customer_coordinates[j, 1, k]],
-            [problem.facility_coordinates[i, 2, k], problem.customer_coordinates[j, 2, k]];
+            [problem.facility_coordinates[i, k][1], problem.customer_coordinates[j, k][1]],
+            [problem.facility_coordinates[i, k][2], problem.customer_coordinates[j, k][2]];
             color=:black,
             label=nothing,
         )
     end
 
     return fig
+end
+
 end

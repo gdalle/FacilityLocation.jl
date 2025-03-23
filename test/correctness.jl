@@ -12,10 +12,12 @@ using Test
         0.3 0.4 0.7 0.4 0.2 0.5
     ]
 
-    problem = FacilityLocationProblem(setup_costs, serving_costs)
+    problem = FacilityLocationProblem(
+        reshape(setup_costs, 3, 1), reshape(serving_costs, 3, 6, 1)
+    )
 
     open_facilities = [false, true, true]
-    solution = Solution(open_facilities, problem)
+    solution = Solution(reshape(open_facilities, 3, 1), problem)
     new_solution, _ = local_search(problem, solution)
 
     @test nb_instances(problem) == 1

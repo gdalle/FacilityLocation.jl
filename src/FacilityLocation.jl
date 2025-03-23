@@ -7,14 +7,14 @@ using GPUArrays
 using KernelAbstractions
 using LinearAlgebra
 using OhMyThreads
-using Plots: plot, scatter!, plot!
 using StableRNGs
 
 include("problem.jl")
 include("solution.jl")
-include("plot.jl")
 include("cpu.jl")
-include("gpu.jl")
+
+function plot_instance end
+function plot_solution end
 
 export FacilityLocationProblem
 export nb_instances, nb_facilities, nb_customers, instances, facilities, customers
