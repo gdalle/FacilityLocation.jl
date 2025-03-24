@@ -85,10 +85,11 @@ function FacilityLocationProblem(
     I2, K3 = size(facility_coordinates)
     @assert I == I2
     @assert K == K2 == K3
-    serving_costs = zeros(Base.promote_eltype(setup_costs, distance_cost), I, J, K)
+    T = eltype(setup_costs)
+    serving_costs = zeros(T, I, J, K)
     for k in 1:K, j in 1:J, i in 1:I
         coord_diff = facility_coordinates[i, k] .- customer_coordinates[j, k]
-        serving_costs[i, j, k] = distance_cost * sqrt(sum(abs2, coord_diff))
+        serving_costs[i, j, k] = T(distance_cost) * sqrt(sum(abs2, coord_diff))
     end
     return FacilityLocationProblem(
         setup_costs, serving_costs; facility_coordinates, customer_coordinates
@@ -98,16 +99,23 @@ end
 """
     FacilityLocationProblem(
         I, J, K;
+        type=Float32,
         distance_cost=1,
         seed, rng,
     )
 """
 function FacilityLocationProblem(
-    I::Integer, J::Integer, K::Integer=1; distance_cost=1, seed=0, rng=StableRNG(seed)
+    I::Integer,
+    J::Integer,
+    K::Integer=1;
+    type::Type=Float32,
+    distance_cost=one(type),
+    seed=0,
+    rng=StableRNG(seed),
 )
-    setup_costs = rand(rng, Float32, I, K)
-    facility_coordinates = [(rand(rng, Float32), rand(rng, Float32)) for i in 1:I, k in 1:K]
-    customer_coordinates = [(rand(rng, Float32), rand(rng, Float32)) for j in 1:J, k in 1:K]
+    setup_costs = rand(rng, type, I, K)
+    facility_coordinates = [(rand(rng, type), rand(rng, type)) for i in 1:I, k in 1:K]
+    customer_coordinates = [(rand(rng, type), rand(rng, type)) for j in 1:J, k in 1:K]
     # not obvious to parametrize with `customers_per_facility` here because we don't know the average distance between a customer and its closest neighboring facility
     return FacilityLocationProblem(
         setup_costs, facility_coordinates, customer_coordinates; distance_cost
