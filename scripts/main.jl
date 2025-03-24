@@ -6,8 +6,10 @@ using BenchmarkTools
 cpu = CPU()
 gpu = CUDA.CUDABackend()
 
-cpu_problem = FacilityLocationProblem(20, 500, 1000; backend=cpu, distance_cost=0.1)
-gpu_problem = FacilityLocationProblem(20, 500, 1000; backend=gpu, distance_cost=0.1)
+distance_cost = 0.1
+I, J, K = 20, 500, 250
+cpu_problem = FacilityLocationProblem(I, J, K; backend=cpu, distance_cost)
+gpu_problem = FacilityLocationProblem(I, J, K; backend=gpu, distance_cost)
 
 gpu_local_search(gpu_problem; iterations=100, verbose=true);
 
