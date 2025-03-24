@@ -1,15 +1,16 @@
 using CUDA
 using FacilityLocation
 using KernelAbstractions
+using BenchmarkTools
 
-using Plots
+cpu = CPU()
+gpu = CUDA.CUDABackend()
 
-# backend = CPU()
-backend = CUDA.CUDABackend()
-problem = FacilityLocationProblem(20, 500, 2; backend, distance_cost=0.1)
+cpu_problem = FacilityLocationProblem(20, 500, 1000; backend=cpu, distance_cost=0.1)
+gpu_problem = FacilityLocationProblem(20, 500, 1000; backend=gpu, distance_cost=0.1)
 
-solution, _ = local_search(p)
+gpu_local_search(gpu_problem; iterations=100, verbose=true);
 
-plot_solution(solution, p, 1)
-
-adapt(backend, ones(10))
+@btime gpu_local_search(gpu_problem; iterations=100);
+@btime gpu_local_search(cpu_problem; iterations=100);
+@btime local_search(cpu_problem; iterations=100);

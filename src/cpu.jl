@@ -106,7 +106,7 @@ end
 """
     local_search(problem; iterations=10, starting_solution)
 
-Perform local search by iteratively finding and applying the best flip movement (open or close a single facility) across all instances in parallel.
+Perform local search on the cpu by iteratively finding and applying the best flip movement (open or close a single facility) across all instances in parallel.
 
 Return a tuple `(new_solution, cost_evolution)`.
 """

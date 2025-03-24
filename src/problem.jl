@@ -39,6 +39,7 @@ function FacilityLocationProblem(
     serving_costs::AbstractArray{<:Real,3};
     facility_coordinates=nothing,
     customer_coordinates=nothing,
+    backend=CPU(),
 )
     @assert eltype(setup_costs) == eltype(serving_costs)
     I1, K1 = size(setup_costs)
@@ -57,10 +58,10 @@ function FacilityLocationProblem(
         facility_to_rank[:, j, k] .= ranks
     end
     return FacilityLocationProblem(
-        setup_costs,
-        serving_costs,
-        rank_to_facility,
-        facility_to_rank,
+        adapt(backend, setup_costs),
+        adapt(backend, serving_costs),
+        adapt(backend, rank_to_facility),
+        adapt(backend, facility_to_rank),
         facility_coordinates,
         customer_coordinates,
     )
@@ -79,6 +80,7 @@ function FacilityLocationProblem(
     facility_coordinates::AbstractMatrix{<:Tuple{Real,Real}},
     customer_coordinates::AbstractMatrix{<:Tuple{Real,Real}};
     distance_cost=one(eltype(setup_costs)),
+    backend=CPU(),
 )
     I, K = size(setup_costs)
     J, K2 = size(customer_coordinates)
@@ -92,7 +94,7 @@ function FacilityLocationProblem(
         serving_costs[i, j, k] = T(distance_cost) * sqrt(sum(abs2, coord_diff))
     end
     return FacilityLocationProblem(
-        setup_costs, serving_costs; facility_coordinates, customer_coordinates
+        setup_costs, serving_costs; facility_coordinates, customer_coordinates, backend
     )
 end
 
@@ -112,13 +114,14 @@ function FacilityLocationProblem(
     distance_cost=one(type),
     seed=0,
     rng=StableRNG(seed),
+    backend=CPU(),
 )
     setup_costs = rand(rng, type, I, K)
-    facility_coordinates = [(rand(rng, type), rand(rng, type)) for i in 1:I, k in 1:K]
-    customer_coordinates = [(rand(rng, type), rand(rng, type)) for j in 1:J, k in 1:K]
+    facility_coordinates = [(rand(rng, type), rand(rng, type)) for _ in 1:I, _ in 1:K]
+    customer_coordinates = [(rand(rng, type), rand(rng, type)) for _ in 1:J, _ in 1:K]
     # not obvious to parametrize with `customers_per_facility` here because we don't know the average distance between a customer and its closest neighboring facility
     return FacilityLocationProblem(
-        setup_costs, facility_coordinates, customer_coordinates; distance_cost
+        setup_costs, facility_coordinates, customer_coordinates; distance_cost, backend
     )
 end
 

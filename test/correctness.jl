@@ -67,3 +67,15 @@ end
     @test all(>(0), cost_evolution)
     @test mean(new_solution.open_facilities) < 1
 end
+
+@testset "GPU version" begin
+    I, J, K = 20, 500, 5
+    problem = FacilityLocationProblem(I, J, K)
+
+    gpu_solution, _ = gpu_local_search(problem; iterations=100)
+    cpu_solution, _ = local_search(problem; iterations=100)
+
+    @test total_cost(gpu_solution, problem) == total_cost(cpu_solution, problem)
+    @test all(cpu_solution.open_facilities .== gpu_solution.open_facilities)
+    @test all(cpu_solution.customer_assignments .== gpu_solution.customer_assignments)
+end
