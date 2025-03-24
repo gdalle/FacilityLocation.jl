@@ -32,6 +32,7 @@ end
         serving_costs::AbstractArray{_,3};
         facility_coordinates=nothing,
         customer_coordinates=nothing,
+        backend=CPU(),
     )
 """
 function FacilityLocationProblem(
@@ -72,7 +73,8 @@ end
         setup_costs::AbstractMatrix,
         facility_coordinates::AbstractMatrix,
         customer_coordinates::AbstractMatrix;
-        distance_cost=1
+        distance_cost=1,
+        backend=CPU(),
     )
 """
 function FacilityLocationProblem(
@@ -98,27 +100,27 @@ function FacilityLocationProblem(
     )
 end
 
+randcoord(rng, ::Type{T}) where {T} = (rand(rng, T), rand(rng, T))
+
 """
     FacilityLocationProblem(
-        I, J, K;
-        type=Float32,
+        rng, T, I, J, K=1;
         distance_cost=1,
-        seed, rng,
+        backend=CPU()
     )
 """
 function FacilityLocationProblem(
+    rng::AbstractRNG,
+    ::Type{T},
     I::Integer,
     J::Integer,
     K::Integer=1;
-    type::Type=Float32,
-    distance_cost=one(type),
-    seed=0,
-    rng=StableRNG(seed),
+    distance_cost=one(T),
     backend=CPU(),
-)
-    setup_costs = rand(rng, type, I, K)
-    facility_coordinates = [(rand(rng, type), rand(rng, type)) for _ in 1:I, _ in 1:K]
-    customer_coordinates = [(rand(rng, type), rand(rng, type)) for _ in 1:J, _ in 1:K]
+) where {T}
+    setup_costs = rand(rng, T, I, K)
+    facility_coordinates = [randcoord(rng, T) for _ in 1:I, _ in 1:K]
+    customer_coordinates = [randcoord(rng, T) for _ in 1:J, _ in 1:K]
     # not obvious to parametrize with `customers_per_facility` here because we don't know the average distance between a customer and its closest neighboring facility
     return FacilityLocationProblem(
         setup_costs, facility_coordinates, customer_coordinates; distance_cost, backend

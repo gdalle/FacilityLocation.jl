@@ -3,11 +3,11 @@ Compute the neighboorhodd by switching the diagonal for each instance.
 """
 @kernel function switch_kernel!(Y)
     i, k = @index(Global, NTuple)
-    Y[i, i, k] = -Y[i, i, k] + 1
+    Y[i, i, k] = !Y[i, i, k]
 end
 
 """
-Compute the setup cost for each neighboorhood `n` and instance `k`.
+Compute the setup cost for each neighbor `n` and instance `k`.
 """
 @kernel function setup_cost_kernel!(C, @Const(Y), @Const(setup_costs))
     n, k = @index(Global, NTuple)
@@ -24,7 +24,7 @@ Compute the setup cost for each neighboorhood `n` and instance `k`.
 end
 
 """
-Compute serving costs for each neighboorhood `n` and instance `k`.
+Compute serving costs for each neighbor `n` and instance `k`.
 """
 @kernel function serving_costs_kernel!(C, @Const(Y), @Const(serving_costs))
     n, k = @index(Global, NTuple)
@@ -49,7 +49,7 @@ Compute serving costs for each neighboorhood `n` and instance `k`.
 end
 
 """
-For each instance `k` store the argmin in `M[k]`` and the min value in `V[k]`.
+For each instance `k` store the argmin in `M[k]` and the min value in `V[k]`.
 """
 @kernel function argmin_kernel!(M, V, @Const(C))
     k = @index(Global)
@@ -70,7 +70,7 @@ For each instance `k` store the argmin in `M[k]`` and the min value in `V[k]`.
 end
 
 """
-For each instance `k`, set all neighboorhoods to the best solution in the argmin `M`.
+For each instance `k`, set all neighbors to the best solution in the argmin `M`.
 """
 @kernel function duplicate_best_solution_kernel!(Y, @Const(M))
     i, n, k = @index(Global, NTuple)

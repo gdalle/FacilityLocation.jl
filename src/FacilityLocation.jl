@@ -8,6 +8,7 @@ using KernelAbstractions:
     KernelAbstractions, CPU, adapt, get_backend, @kernel, @index, @Const, synchronize
 using LinearAlgebra
 using OhMyThreads
+using Random: AbstractRNG
 using StableRNGs
 
 include("problem.jl")
