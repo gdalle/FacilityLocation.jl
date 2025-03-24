@@ -150,6 +150,7 @@ function gpu_local_search(problem::FLP; iterations=10, verbose=false)
     compute_assignments_kernel!(backend)(
         assignments, best_y, problem.rank_to_facility; ndrange=(J, K)
     )
+    synchronize(backend)
 
     solution = Solution(best_y, assignments)
 
