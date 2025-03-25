@@ -22,6 +22,11 @@ function Solution(open_facilities::AbstractMatrix{Bool}, problem::FLP)
     return Solution(open_facilities, customer_assignments)
 end
 
+function Solution(problem)
+    open_facilities = ones(Bool, nb_facilities(problem), nb_instances(problem))
+    return Solution(open_facilities, problem)
+end
+
 function Base.copy(solution::Solution)
     return Solution(copy(solution.open_facilities), copy(solution.customer_assignments))
 end

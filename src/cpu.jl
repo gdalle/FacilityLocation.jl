@@ -111,11 +111,7 @@ Perform local search on the CPU by iteratively finding and applying the best fli
 Return a tuple `(new_solution, cost_evolution)`.
 """
 function local_search(
-    problem::FLP,
-    starting_solution::Solution=Solution(
-        ones(Bool, nb_facilities(problem), nb_instances(problem)), problem
-    );
-    iterations=10,
+    problem::FLP, starting_solution::Solution=Solution(problem); iterations=10
 )
     solution = copy(starting_solution)
     flip_costs = fill(
