@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+Atomix = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
 FacilityLocationProblems = "3771e204-432d-45a9-9661-5d0025a53671"
 GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
@@ -22,10 +23,11 @@ FacilityLocationPlotsExt = "Plots"
 
 [compat]
 Adapt = "4.2.0"
+Atomix = "1.1.1"
 GPUArrays = "11.2.2"
 KernelAbstractions = "0.9.34"
 LinearAlgebra = "1.11.0"
-OhMyThreads = "0.7.0"
+OhMyThreads = "0.7,0.8"
 Plots = "1.40.11"
 Random = "1.11.0"
 StableRNGs = "1.0.2"

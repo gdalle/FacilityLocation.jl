@@ -22,7 +22,7 @@ function Solution(open_facilities::AbstractMatrix{Bool}, problem::FLP)
     return Solution(open_facilities, customer_assignments)
 end
 
-function Solution(problem)
+function Solution(problem::FLP)
     open_facilities = ones(Bool, nb_facilities(problem), nb_instances(problem))
     return Solution(open_facilities, problem)
 end

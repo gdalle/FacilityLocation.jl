@@ -1,158 +1,121 @@
-"""
-Compute the neighboorhodd by switching the diagonal for each instance.
-"""
-@kernel function switch_kernel!(Y)
-    i, k = @index(Global, NTuple)
-    Y[i, i, k] = !Y[i, i, k]
-end
+@kernel function gpu_local_search!(
+    open_facilities::AbstractMatrix,
+    current_costs_by_customer::AbstractMatrix,
+    neighbor_costs_by_customer::AbstractArray{<:Any,3},
+    neighbor_switch_costs::AbstractMatrix,
+    best_neighbor_cost::AbstractVector,
+    best_neighbor_index::AbstractVector,
+    setup_costs::AbstractMatrix,
+    serving_costs::AbstractArray{<:Any,3},
+    iterations::Integer,
+    ::Val{I},
+    ::Val{K},
+) where {I,K}
+    @uniform J = size(serving_costs, 2)
+    @assert I <= J
 
-"""
-Compute the setup cost for each neighbor `n` and instance `k`.
-"""
-@kernel function setup_cost_kernel!(C, @Const(Y), @Const(setup_costs))
-    n, k = @index(Global, NTuple)
+    # i is the current facility, n the switching facility, j the affected customer
+    i, j, _ = @index(Local, NTuple)
+    n, _, _ = @index(Local, NTuple)
+    # k is the instance
+    _, _, k = @index(Group, NTuple)
 
-    I = size(setup_costs, 1)
+    # initialize local memory
+    neighbor_open_facilities = @localmem Bool (I, I)
 
-    T = eltype(C)
+    for _ in 1:iterations
 
-    res = zero(T)
-    for i in 1:I
-        res += setup_costs[i, k] * Y[i, n, k]
-    end
-    C[n, k] = res
-end
+        # initialize neighbors
+        if j <= I  # pretend j denotes a neighbor
+            n2 = j
+            o = open_facilities[i, k]
+            neighbor_open_facilities[i, n2] = ifelse(n2 == i, !o, o)
+        end
+        @synchronize()
 
-"""
-Compute serving costs for each neighbor `n` and instance `k`.
-"""
-@kernel function serving_costs_kernel!(C, @Const(Y), @Const(serving_costs))
-    n, k = @index(Global, NTuple)
-
-    I = size(serving_costs, 1)
-    J = size(serving_costs, 2)
-
-    T = eltype(C)
-
-    res = zero(T)
-    for j in 1:J
-        local_res = typemax(T)
-        for i in 1:I
-            if !Y[i, n, k]
-                continue
+        # perform matmul to get customer costs in each neighbor
+        tmp = typemax(eltype(serving_costs))
+        for i2 in 1:I
+            s = serving_costs[i2, j, k]
+            tmp = ifelse(neighbor_open_facilities[i2, n], min(tmp, s), tmp)
+        end
+        neighbor_costs_by_customer[n, j, k] = tmp
+        # perform matmul to get customer costs in the current solution
+        if n == 1
+            tmp = typemax(eltype(serving_costs))
+            for i2 in 1:I
+                s = serving_costs[i2, j, k]
+                tmp = ifelse(open_facilities[i2, k], min(tmp, s), tmp)
             end
-            local_res = min(local_res, serving_costs[i, j, k])
+            current_costs_by_customer[j, k] = tmp
         end
-        res += local_res
-    end
-    C[n, k] = res
-end
+        @synchronize()
 
-"""
-For each instance `k` store the argmin in `M[k]` and the min value in `V[k]`.
-"""
-@kernel function argmin_kernel!(M, V, @Const(C))
-    k = @index(Global)
-
-    best_index = -1
-    min_value = typemax(eltype(C))
-
-    N = size(C, 1)
-    for n in 1:N
-        if C[n, k] < min_value
-            best_index = n
-            min_value = C[n, k]
+        # compare customer and setup costs between neighbor and current
+        if j <= I  # pretend j denotes a facility
+            i2 = j
+            o = neighbor_open_facilities[i2, n] - open_facilities[i2, k]
+            @atomic neighbor_switch_costs[n, k] += o * setup_costs[i2, k]
         end
-    end
+        @synchronize()
 
-    M[k] = best_index
-    V[k] = min_value
-end
+        @atomic neighbor_switch_costs[n, k] += (
+            neighbor_costs_by_customer[n, j, k] - current_costs_by_customer[j, k]
+        )
+        @synchronize()
 
-"""
-For each instance `k`, set all neighbors to the best solution in the argmin `M`.
-"""
-@kernel function duplicate_best_solution_kernel!(Y, @Const(M))
-    i, n, k = @index(Global, NTuple)
-    Y[i, n, k] = Y[i, M[k], k]
-end
-
-"""
-Copy the current best solution to `y`.
-"""
-@kernel function retrieve_best_solution_kernel!(y, @Const(Y))
-    i, k = @index(Global, NTuple)
-    N = size(Y, 2)
-    y[i, k] = Y[i, N, k]
-end
-
-"""
-Compute customer assignments from solution `Y` and rank to facility matrix.
-"""
-@kernel function compute_assignments_kernel!(X, @Const(Y), @Const(rank_to_facility))
-    j, k = @index(Global, NTuple)
-    I = size(rank_to_facility, 1)
-    for r in 1:I
-        i = rank_to_facility[r, j, k]
-        if Y[i, k]
-            X[j, k] = i
-            break
+        # find best neighbor
+        if j == 1 && n == 1
+            # TODO: better way to do min inside a kernel
+            best_neighbor_cost[k] = typemax(Float32)
+            best_neighbor_index[k] = typemax(Int)
+            for n2 in 1:I
+                best_neighbor_cost[k] = min(
+                    neighbor_switch_costs[n2, k], best_neighbor_cost[k]
+                )
+                best_neighbor_index[k] = ifelse(
+                    best_neighbor_cost[k] == neighbor_switch_costs[n2, k],
+                    n2,
+                    best_neighbor_index[k],
+                )
+            end
         end
+        @synchronize()
+        if best_neighbor_cost[k] < 0 && j == 1
+            o = open_facilities[n, k]
+            open_facilities[n, k] = ifelse(n == best_neighbor_index[k], !o, o)
+        end
+        @synchronize()
     end
 end
 
-"""
-    gpu_local_search(problem::FLP; iterations=10)
-
-Perform a local search on the (gpu) backend of the problem.
-"""
-function gpu_local_search(problem::FLP; iterations=10, verbose=false)
+function gpu_local_search(problem::FLP; iterations=10)
+    I, J, K = nb_facilities(problem), nb_customers(problem), nb_instances(problem)
     backend = get_backend(problem)
 
-    I = nb_facilities(problem)
-    J = nb_customers(problem)
-    K = nb_instances(problem)
-    N = I + 1 # last solution is the current best one
+    open_facilities = adapt(backend, ones(Bool, I, K))
+    current_costs_by_customer = adapt(backend, zeros(Float32, J, K))
+    neighbor_costs_by_customer = adapt(backend, zeros(Float32, I, J, K))
+    neighbor_switch_costs = adapt(backend, zeros(Float32, I, K))
+    best_neighbor_cost = adapt(backend, zeros(Float32, K))
+    best_neighbor_index = adapt(backend, zeros(Int, K))
+    block_dims = (I, J, 1)
+    grid_dims = (I, J, K)
 
-    (; setup_costs, serving_costs) = problem
-    T = eltype(setup_costs)
-
-    Y = KernelAbstractions.ones(backend, Bool, I, N, K)
-    C = KernelAbstractions.zeros(backend, T, N, K)
-    CC = KernelAbstractions.zeros(backend, T, N, K)
-    M = KernelAbstractions.zeros(backend, Int, K)
-    V = KernelAbstractions.zeros(backend, T, K)
-
-    for it in 1:iterations
-        switch_kernel!(backend)(Y; ndrange=(I, K))
-        synchronize(backend)
-        setup_cost_kernel!(backend)(CC, Y, setup_costs; ndrange=(N, K))
-        synchronize(backend)
-        serving_costs_kernel!(backend)(C, Y, serving_costs; ndrange=(N, K))
-        synchronize(backend)
-        argmin_kernel!(backend)(M, V, C + CC; ndrange=K)
-        synchronize(backend)
-        duplicate_best_solution_kernel!(backend)(Y, M; ndrange=(I, N, K))
-        synchronize(backend)
-
-        verbose && println("Iteration $it: $(sum(V))")
-
-        if all(M .== N)
-            break
-        end
-    end
-
-    best_y = KernelAbstractions.ones(backend, Bool, I, K)
-    retrieve_best_solution_kernel!(backend)(best_y, Y; ndrange=(I, K))
-    synchronize(backend)
-
-    assignments = KernelAbstractions.zeros(backend, Int, J, K)
-    compute_assignments_kernel!(backend)(
-        assignments, best_y, problem.rank_to_facility; ndrange=(J, K)
+    gpu_local_search!(backend, block_dims)(
+        open_facilities,
+        current_costs_by_customer,
+        neighbor_costs_by_customer,
+        neighbor_switch_costs,
+        best_neighbor_cost,
+        best_neighbor_index,
+        problem.setup_costs,
+        problem.serving_costs,
+        iterations,
+        Val(I),
+        Val(K);
+        ndrange=grid_dims,
     )
-    synchronize(backend)
-
-    solution = Solution(best_y, assignments)
-
-    return solution, V
+    KernelAbstractions.synchronize(backend)
+    return open_facilities
 end
