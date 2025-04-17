@@ -95,7 +95,6 @@ function FacilityLocationProblem(
         coord_diff = facility_coordinates[i, k] .- customer_coordinates[j, k]
         serving_costs[i, j, k] = T(distance_cost) * sqrt(sum(abs2, coord_diff))
     end
-    @show serving_costs
     return FacilityLocationProblem(
         setup_costs, serving_costs; facility_coordinates, customer_coordinates, backend
     )
