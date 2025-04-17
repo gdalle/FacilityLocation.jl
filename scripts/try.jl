@@ -9,7 +9,7 @@ using KernelAbstractions
 using Metal
 using StableRNGs
 
-backend = CPU()
+backend = Metal.MetalBackend()
 
 distance_cost = 0.1
 I, J, K = 5, 20, 10

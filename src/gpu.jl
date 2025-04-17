@@ -52,13 +52,18 @@
         @synchronize()
 
         # compare customer and setup costs between neighbor and current
+        if j == 1
+            neighbor_switch_costs[n, k] = 0
+        end
         if j <= I  # pretend j denotes a facility
             i2 = j
             o = neighbor_open_facilities[i2, n] - open_facilities[i2, k]
+            # TODO: better way to sum inside a kernel
             @atomic neighbor_switch_costs[n, k] += o * setup_costs[i2, k]
         end
         @synchronize()
 
+        # TODO: better way to sum inside a kernel
         @atomic neighbor_switch_costs[n, k] += (
             neighbor_costs_by_customer[n, j, k] - current_costs_by_customer[j, k]
         )
@@ -81,7 +86,10 @@
             end
         end
         @synchronize()
-        if best_neighbor_cost[k] < 0 && j == 1
+
+        if best_neighbor_cost[k] > 0
+            break
+        elseif j == 1
             o = open_facilities[n, k]
             open_facilities[n, k] = ifelse(n == best_neighbor_index[k], !o, o)
         end
@@ -93,10 +101,12 @@ function gpu_local_search(problem::FLP; iterations=10)
     I, J, K = nb_facilities(problem), nb_customers(problem), nb_instances(problem)
     backend = get_backend(problem)
 
+    N = I
+
     open_facilities = adapt(backend, ones(Bool, I, K))
     current_costs_by_customer = adapt(backend, zeros(Float32, J, K))
-    neighbor_costs_by_customer = adapt(backend, zeros(Float32, I, J, K))
-    neighbor_switch_costs = adapt(backend, zeros(Float32, I, K))
+    neighbor_costs_by_customer = adapt(backend, zeros(Float32, N, J, K))
+    neighbor_switch_costs = adapt(backend, zeros(Float32, N, K))
     best_neighbor_cost = adapt(backend, zeros(Float32, K))
     best_neighbor_index = adapt(backend, zeros(Int, K))
     block_dims = (I, J, 1)
